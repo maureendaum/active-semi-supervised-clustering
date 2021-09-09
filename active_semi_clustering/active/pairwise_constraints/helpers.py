@@ -1,4 +1,11 @@
-def get_constraints_from_neighborhoods(neighborhoods):
+def neighborhoods_have_cl(n1, n2, cl):
+    for i in n1:
+        for j in n2:
+            if (i, j) in cl:
+                return True
+    return False
+
+def get_constraints_from_neighborhoods(neighborhoods, oracle_ml, oracle_cl):
     ml = []
 
     for neighborhood in neighborhoods:
@@ -10,7 +17,7 @@ def get_constraints_from_neighborhoods(neighborhoods):
     cl = []
     for neighborhood in neighborhoods:
         for other_neighborhood in neighborhoods:
-            if neighborhood != other_neighborhood:
+            if neighborhood != other_neighborhood and neighborhoods_have_cl(neighborhood, other_neighborhood, oracle_cl):
                 for i in neighborhood:
                     for j in other_neighborhood:
                         cl.append((i, j))

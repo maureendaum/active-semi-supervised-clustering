@@ -3,7 +3,7 @@ import scipy
 
 from active_semi_clustering.exceptions import EmptyClustersException
 from active_semi_clustering.farthest_first_traversal import weighted_farthest_first_traversal
-from .constraints import preprocess_constraints
+from .constraints import preprocess_constraints, find_centroids
 
 np.seterr('raise')
 
@@ -87,8 +87,9 @@ class MPCKMeans:
             else:
                 cluster_centers = np.empty((0, X.shape[1]))
 
-            if len(neighborhoods) < self.n_clusters:
-                remaining_cluster_centers = X[np.random.choice(X.shape[0], self.n_clusters - len(neighborhoods), replace=False), :]
+            num_remaining_clusters = self.n_clusters - len(neighborhoods)
+            if num_remaining_clusters:
+                remaining_cluster_centers = find_centroids(num_remaining_clusters, X)
                 cluster_centers = np.concatenate([cluster_centers, remaining_cluster_centers])
 
         return cluster_centers
@@ -98,7 +99,7 @@ class MPCKMeans:
         return scipy.spatial.distance.mahalanobis(x, y, A) ** 2
 
     def _objective_fn(self, X, i, labels, cluster_centers, cluster_id, A, farthest, ml_graph, cl_graph, w):
-        term_d = self._dist(X[i], cluster_centers[cluster_id], A) - np.log(np.linalg.det(A)) / np.log(2)  # FIXME is it okay that it might be negative?
+        term_d = self._dist(X[i], cluster_centers[cluster_id], A) - np.log2(np.linalg.det(A))  # FIXME is it okay that it might be negative?
 
         def f_m(i, j, A):
             return self._dist(X[i], X[j], A)
@@ -109,13 +110,13 @@ class MPCKMeans:
         term_m = 0
         for j in ml_graph[i]:
             if labels[j] >= 0 and labels[j] != cluster_id:
-                term_m += 2 * w * f_m(i, j, A)
+                term_m += w * f_m(i, j, A)
 
         term_c = 0
         for j in cl_graph[i]:
             if labels[j] == cluster_id:
                 # assert f_c(i, j, A, farthest) >= 0
-                term_c += 2 * w * f_c(i, j, A, farthest)
+                term_c += w * f_c(i, j, A, farthest)
 
         return term_d + term_m + term_c
 

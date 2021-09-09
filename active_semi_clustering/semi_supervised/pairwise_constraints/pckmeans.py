@@ -1,7 +1,7 @@
 import numpy as np
 
 from active_semi_clustering.exceptions import EmptyClustersException
-from .constraints import preprocess_constraints
+from .constraints import preprocess_constraints, find_centroids
 
 
 class PCKMeans:
@@ -15,7 +15,7 @@ class PCKMeans:
         ml_graph, cl_graph, neighborhoods = preprocess_constraints(ml, cl, X.shape[0])
 
         # Initialize centroids
-        cluster_centers = self._initialize_cluster_centers(X, neighborhoods)
+        cluster_centers = self._initialize_cluster_centers(X, neighborhoods, cl_graph)
 
         # Repeat until convergence
         for iteration in range(self.max_iter):
@@ -36,7 +36,23 @@ class PCKMeans:
 
         return self
 
-    def _initialize_cluster_centers(self, X, neighborhoods):
+    def _element_with_cannotlink_to_all(self, X, neighborhoods, cl_graph):
+        for i in range(X.shape[0]):
+            all_neighbors_have_cannotlink = True
+            for neighborhood in neighborhoods:
+                has_cannotlink = False
+                for j in neighborhood:
+                    if j in cl_graph[i]:
+                        has_cannotlink = True
+                        break
+                if not has_cannotlink:
+                    all_neighbors_have_cannotlink = False
+                    break
+            if all_neighbors_have_cannotlink:
+                return i
+        return None
+
+    def _initialize_cluster_centers(self, X, neighborhoods, cl_graph):
         neighborhood_centers = np.array([X[neighborhood].mean(axis=0) for neighborhood in neighborhoods])
         neighborhood_sizes = np.array([len(neighborhood) for neighborhood in neighborhoods])
 
@@ -49,10 +65,18 @@ class PCKMeans:
             else:
                 cluster_centers = np.empty((0, X.shape[1]))
 
-            # FIXME look for a point that is connected by cannot-links to every neighborhood set
+            # Look for a point that is connected by cannot-links to every neighborhood set.
+            while len(neighborhoods) < self.n_clusters:
+                next_el = self._element_with_cannotlink_to_all(X, neighborhoods, cl_graph)
+                if next_el is not None:
+                    neighborhoods.append([next_el])
+                    cluster_centers = np.concatenate([cluster_centers, X[next_el]])
+                else:
+                    break
 
-            if len(neighborhoods) < self.n_clusters:
-                remaining_cluster_centers = X[np.random.choice(X.shape[0], self.n_clusters - len(neighborhoods), replace=False), :]
+            num_remaining_clusters = self.n_clusters - len(neighborhoods)
+            if num_remaining_clusters > 0:
+                remaining_cluster_centers = find_centroids(num_remaining_clusters, X)
                 cluster_centers = np.concatenate([cluster_centers, remaining_cluster_centers])
 
         return cluster_centers

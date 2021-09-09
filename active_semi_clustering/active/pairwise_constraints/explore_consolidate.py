@@ -15,7 +15,7 @@ class ExploreConsolidate:
         neighborhoods = self._explore(X, self.n_clusters, oracle)
         neighborhoods = self._consolidate(neighborhoods, X, oracle)
 
-        self.pairwise_constraints_ = get_constraints_from_neighborhoods(neighborhoods)
+        self.pairwise_constraints_ = get_constraints_from_neighborhoods(neighborhoods, oracle.ml, oracle.cl)
 
         return self
 

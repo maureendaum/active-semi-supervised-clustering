@@ -7,11 +7,18 @@ class ExampleOracle:
         self.labels = labels
         self.queries_cnt = 0
         self.max_queries_cnt = max_queries_cnt
+        self.ml = []
+        self.cl = []
 
     def query(self, i, j):
         "Query the oracle to find out whether i and j should be must-linked"
         if self.queries_cnt < self.max_queries_cnt:
             self.queries_cnt += 1
-            return self.labels[i] == self.labels[j]
+            ml = self.labels[i] == self.labels[j]
+            if ml:
+                self.ml.append((i, j))
+            else:
+                self.cl.append((i, j))
+            return ml
         else:
             raise MaximumQueriesExceeded

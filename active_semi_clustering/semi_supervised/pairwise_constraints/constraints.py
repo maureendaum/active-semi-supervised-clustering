@@ -1,5 +1,31 @@
 from active_semi_clustering.exceptions import InconsistentConstraintsException
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 
+# Algorithm Refine from https://www.aaai.org/Papers/KDD/1998/KDD98-032.pdf
+def find_centroids(n, X):
+    j = 10
+    s = max(int(0.1 * X.shape[0]), n)
+    assert s <= X.shape[0], 'Number of samples > number of data points (%r > %r)' % (s, X.shape[0])
+    rng = np.random.default_rng()
+
+    em_centers = []
+    for _ in range(j):
+        sample = rng.choice(X, s, replace=False)
+        while True:
+            gm = GaussianMixture(n_components=n).fit(sample)
+            num_nonempty = len(np.unique(gm.predict(sample)))
+            if num_nonempty == n:
+                break
+        em_centers.append(gm.means_)
+    em_data = np.concatenate(em_centers)
+    kmeans = []
+    for i in range(j):
+        km = KMeans(n_clusters=n, init=em_centers[i]).fit(em_data)
+        kmeans.append(km)
+    best_fit = np.argmax([km.score(em_data) for km in kmeans])
+    return kmeans[best_fit].cluster_centers_
 
 # Taken from https://github.com/Behrouz-Babaki/COP-Kmeans/blob/master/copkmeans/cop_kmeans.py
 def preprocess_constraints(ml, cl, n):
