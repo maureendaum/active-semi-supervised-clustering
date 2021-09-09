@@ -3,9 +3,8 @@ import scipy
 
 from active_semi_clustering.exceptions import EmptyClustersException
 from active_semi_clustering.farthest_first_traversal import weighted_farthest_first_traversal
-from .constraints import preprocess_constraints, find_centroids
-
-np.seterr('raise')
+from .constraints import preprocess_constraints
+from .cluster_helpers import find_centroids
 
 
 class MPCKMeans:

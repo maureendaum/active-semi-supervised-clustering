@@ -29,7 +29,7 @@ class MKMeans:
                     pairs.append((i, j))
                     labels.append(-1)
 
-            mmc = MMC(diagonal=self.diagonal, preprocessor=X)
+            mmc = MMC(diagonal=self.diagonal, preprocessor=X, max_iter=self.max_iter)
             mmc.fit(pairs, labels)
             X_transformed = mmc.transform(X)
 
@@ -39,16 +39,3 @@ class MKMeans:
         self.labels_ = kmeans.labels_
 
         return self
-
-
-        # pairs = []
-        # y = []
-        # ml_graph, cl_graph, _ = preprocess_constraints(ml, cl, X.shape[0])
-        # for i, constraints in ml_graph.items():
-        #     for j in constraints:
-        #         pairs.append((X[i], X[j]))
-        #         y.append(1)
-        # for i, constraints in cl_graph.items():
-        #     for j in constraints:
-        #         pairs.append((X[i], X[j]))
-        #         y.append(-1)

@@ -1,7 +1,8 @@
 import numpy as np
 
 from active_semi_clustering.exceptions import EmptyClustersException
-from .constraints import preprocess_constraints, find_centroids
+from .constraints import preprocess_constraints
+from .cluster_helpers import find_centroids
 
 
 class PCKMeans:
@@ -70,7 +71,7 @@ class PCKMeans:
                 next_el = self._element_with_cannotlink_to_all(X, neighborhoods, cl_graph)
                 if next_el is not None:
                     neighborhoods.append([next_el])
-                    cluster_centers = np.concatenate([cluster_centers, X[next_el]])
+                    cluster_centers = np.concatenate([cluster_centers, X[next_el].reshape(1, -1)])
                 else:
                     break
 
