@@ -14,24 +14,24 @@ class MKMeans:
     def fit(self, X, y=None, ml=[], cl=[]):
         X_transformed = X
 
-        if ml and cl:
-            ml_graph, cl_graph, _ = preprocess_constraints(ml, cl, X.shape[0])
+        assert ml and cl
+        ml_graph, cl_graph, _ = preprocess_constraints(ml, cl, X.shape[0])
 
-            pairs = []
-            labels = []
-            for i, constraints in ml_graph.items():
-                for j in constraints:
-                    pairs.append((i, j))
-                    labels.append(1)
+        pairs = []
+        labels = []
+        for i, constraints in ml_graph.items():
+            for j in constraints:
+                pairs.append((i, j))
+                labels.append(1)
 
-            for i, constraints in cl_graph.items():
-                for j in constraints:
-                    pairs.append((i, j))
-                    labels.append(-1)
+        for i, constraints in cl_graph.items():
+            for j in constraints:
+                pairs.append((i, j))
+                labels.append(-1)
 
-            mmc = MMC(diagonal=self.diagonal, preprocessor=X, max_iter=self.max_iter)
-            mmc.fit(pairs, labels)
-            X_transformed = mmc.transform(X)
+        mmc = MMC(diagonal=self.diagonal, preprocessor=X, max_iter=self.max_iter)
+        mmc.fit(pairs, labels)
+        X_transformed = mmc.transform(X)
 
         kmeans = KMeans(n_clusters=self.n_clusters, init='k-means++', max_iter=self.max_iter)
         kmeans.fit(X_transformed)

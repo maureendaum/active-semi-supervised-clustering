@@ -1,4 +1,5 @@
 import numpy as np
+import sklearn.metrics
 
 from active_semi_clustering.exceptions import EmptyClustersException
 from .constraints import preprocess_constraints
@@ -19,6 +20,8 @@ class PCKMeans:
         cluster_centers = self._initialize_cluster_centers(X, neighborhoods, cl_graph)
 
         # Repeat until convergence
+        self.objective_function_values = []
+        self.v_measure_values = []
         for iteration in range(self.max_iter):
             # Assign clusters
             labels = self._assign_clusters(X, cluster_centers, ml_graph, cl_graph, self.w)
@@ -26,6 +29,14 @@ class PCKMeans:
             # Estimate means
             prev_cluster_centers = cluster_centers
             cluster_centers = self._get_cluster_centers(X, labels)
+
+            # Compute sum over objective function.
+            index = list(range(X.shape[0]))
+            error = 0
+            for x_i in index:
+                error += self._objective_function(X, x_i, cluster_centers, labels[x_i], labels, ml_graph, cl_graph, self.w)
+            self.objective_function_values.append(error)
+            self.v_measure_values.append(sklearn.metrics.v_measure_score(y, labels))
 
             # Check for convergence
             difference = (prev_cluster_centers - cluster_centers)

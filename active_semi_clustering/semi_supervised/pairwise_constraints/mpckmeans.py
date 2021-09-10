@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+import sklearn.metrics
 
 from active_semi_clustering.exceptions import EmptyClustersException
 from active_semi_clustering.farthest_first_traversal import weighted_farthest_first_traversal
@@ -26,6 +27,8 @@ class MPCKMeans:
         A = np.identity(X.shape[1])
 
         # Repeat until convergence
+        self.objective_function_values = []
+        self.v_measure_values = []
         for iteration in range(self.max_iter):
             prev_cluster_centers = cluster_centers.copy()
 
@@ -40,6 +43,13 @@ class MPCKMeans:
 
             # Update metrics
             A = self._update_metrics(X, labels, cluster_centers, farthest, ml_graph, cl_graph, self.w)
+
+            # Compute objective function value
+            error = 0
+            for x_i in range(X.shape[0]):
+                error += self._objective_fn(X, x_i, labels, cluster_centers, labels[x_i], A, farthest, ml_graph, cl_graph, self.w)
+            self.objective_function_values.append(error)
+            self.v_measure_values.append(sklearn.metrics.v_measure_score(y, labels))
 
             # Check for convergence
             cluster_centers_shift = (prev_cluster_centers - cluster_centers)
@@ -60,12 +70,11 @@ class MPCKMeans:
         max_distance = 0
 
         for i in range(n):
-            for j in range(n):
-                if j < i:
-                    distance = self._dist(X[i], X[j], A)
-                    if distance > max_distance:
-                        max_distance = distance
-                        farthest = (i, j, distance)
+            for j in range(i):
+                distance = self._dist(X[i], X[j], A)
+                if distance > max_distance:
+                    max_distance = distance
+                    farthest = (i, j, distance)
 
         assert farthest is not None
 
