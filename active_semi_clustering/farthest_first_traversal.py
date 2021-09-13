@@ -30,11 +30,12 @@ def farthest_first_traversal(points, k):
     return traversed
 
 
-def weighted_farthest_first_traversal(points, weights, k):
+def weighted_farthest_first_traversal(points, weights, k, rng=None):
+    rng = rng if rng else np.random.default_rng()
     traversed = []
 
     # Choose the first point randomly (weighted)
-    i = np.random.choice(len(points), size=1, p=weights)[0]
+    i = rng.choice(len(points), size=1, p=weights)[0]
     traversed.append(i)
 
     # Find remaining n - 1 maximally separated points

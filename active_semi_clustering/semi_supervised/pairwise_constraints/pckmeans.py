@@ -36,7 +36,8 @@ class PCKMeans:
             for x_i in index:
                 error += self._objective_function(X, x_i, cluster_centers, labels[x_i], labels, ml_graph, cl_graph, self.w)
             self.objective_function_values.append(error)
-            self.v_measure_values.append(sklearn.metrics.v_measure_score(y, labels))
+            not_nan = np.where(y != '')
+            self.v_measure_values.append(sklearn.metrics.v_measure_score(y[not_nan], labels[not_nan]))
 
             # Check for convergence
             difference = (prev_cluster_centers - cluster_centers)

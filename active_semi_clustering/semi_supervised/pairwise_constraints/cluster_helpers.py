@@ -5,11 +5,11 @@ from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 
 # Algorithm Refine from https://www.aaai.org/Papers/KDD/1998/KDD98-032.pdf
-def find_centroids(n, X):
+def find_centroids(n, X, rng=None):
     j = 10
     s = max(int(0.1 * X.shape[0]), n)
     assert s <= X.shape[0], 'Number of samples > number of data points (%r > %r)' % (s, X.shape[0])
-    rng = np.random.default_rng()
+    rng = rng if rng else np.random.default_rng()
 
     em_centers = []
     for _ in range(j):

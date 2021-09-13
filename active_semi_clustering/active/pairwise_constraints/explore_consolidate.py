@@ -8,23 +8,23 @@ class ExploreConsolidate:
     def __init__(self, n_clusters=3, **kwargs):
         self.n_clusters = n_clusters
 
-    def fit(self, X, oracle=None):
+    def fit(self, X, oracle=None, allowed_indices=None):
         if oracle.max_queries_cnt <= 0:
             return [], []
 
-        neighborhoods = self._explore(X, self.n_clusters, oracle)
-        neighborhoods = self._consolidate(neighborhoods, X, oracle)
+        neighborhoods = self._explore(X, self.n_clusters, oracle, allowed_indices)
+        neighborhoods = self._consolidate(neighborhoods, X, oracle, allowed_indices)
 
         self.pairwise_constraints_ = get_constraints_from_neighborhoods(neighborhoods, oracle.ml, oracle.cl)
 
         return self
 
-    def _explore(self, X, k, oracle):
+    def _explore(self, X, k, oracle, allowed_indices):
         neighborhoods = []
         traversed = []
-        n = X.shape[0]
+        index = allowed_indices if allowed_indices else range(X.shape[0])
 
-        x = np.random.choice(n)
+        x = np.random.choice(index)
         neighborhoods.append([x])
         traversed.append(x)
 
@@ -34,7 +34,7 @@ class ExploreConsolidate:
                 max_distance = 0
                 farthest = None
 
-                for i in range(n):
+                for i in index:
                     if i not in traversed:
                         distance = dist(i, traversed, X)
                         if distance > max_distance:
@@ -58,8 +58,8 @@ class ExploreConsolidate:
 
         return neighborhoods
 
-    def _consolidate(self, neighborhoods, X, oracle):
-        n = X.shape[0]
+    def _consolidate(self, neighborhoods, X, oracle, allowed_indices):
+        index = allowed_indices if allowed_indices else range(X.shape[0])
 
         neighborhoods_union = set()
         for neighborhood in neighborhoods:
@@ -67,7 +67,7 @@ class ExploreConsolidate:
                 neighborhoods_union.add(i)
 
         remaining = set()
-        for i in range(n):
+        for i in index:
             if i not in neighborhoods_union:
                 remaining.add(i)
 
