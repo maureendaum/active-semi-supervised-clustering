@@ -13,7 +13,7 @@ def find_centroids(n, X, rng=None):
 
     em_centers = []
     for _ in range(j):
-        sample = rng.choice(X, s, replace=False)
+        sample = X[rng.choice(X.shape[0], s, replace=False), :]
         while True:
             gm = GaussianMixture(n_components=n).fit(sample)
             num_nonempty = len(np.unique(gm.predict(sample)))

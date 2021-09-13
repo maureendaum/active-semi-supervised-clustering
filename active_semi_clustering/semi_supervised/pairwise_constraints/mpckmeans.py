@@ -19,20 +19,20 @@ class MPCKMeans:
         self.w = w
         self.rng = rng if rng else np.random.default_rng()
 
-    def fit(self, X, y=None, ml=set(), cl=set(), random_init=False):
+    def fit(self, X, y=None, ml=set(), cl=set(), random_init=False, stop_early=True):
         # Preprocess constraints
         preprocess_start = time.perf_counter()
         ml_graph, cl_graph, neighborhoods = preprocess_constraints(ml, cl, X.shape[0])
-        print(f'Preprocess constraints took {time.perf_counter() - preprocess_start:0.2f}s')
+        # print(f'Preprocess constraints took {time.perf_counter() - preprocess_start:0.2f}s')
 
         # Initialize cluster centers
         init_start = time.perf_counter()
         if random_init:
-            print('Random initialization of cluster centers')
-            cluster_centers = X[rng.choice(X.shape[0], self.n_clusters, replace=False), :]
+            # print('Random initialization of cluster centers')
+            cluster_centers = X[self.rng.choice(X.shape[0], self.n_clusters, replace=False), :]
         else:
             cluster_centers = self._initialize_cluster_centers(X, neighborhoods)
-        print(f'Initialize centers took {time.perf_counter() - init_start:0.2f}s')
+        # print(f'Initialize centers took {time.perf_counter() - init_start:0.2f}s')
 
         assert cluster_centers.shape[0] == self.n_clusters
 
@@ -40,6 +40,7 @@ class MPCKMeans:
         A = np.identity(X.shape[1])
 
         # Repeat until convergence
+        self.initial_centers = cluster_centers
         self.objective_function_values = []
         self.v_measure_values = []
         self.homogeneity_values = []
@@ -92,7 +93,7 @@ class MPCKMeans:
             cluster_centers_shift = (prev_cluster_centers - cluster_centers)
             converged = np.allclose(cluster_centers_shift, np.zeros(cluster_centers.shape), atol=1e-6, rtol=0)
 
-            if converged:
+            if converged and stop_early:
                 break
 
             iteration_time = time.perf_counter() - start
@@ -109,7 +110,34 @@ class MPCKMeans:
         farthest = None
         max_distance = 0
 
-        for i, j in cl:
+        # Copied from https://docs.python.org/3/howto/sorting.html#sortinghowto
+        def cmp_to_key(mycmp):
+            'Convert a cmp= function into a key= function'
+            class K:
+                def __init__(self, obj, *args):
+                    self.obj = obj
+                def __lt__(self, other):
+                    return mycmp(self.obj, other.obj) < 0
+                def __gt__(self, other):
+                    return mycmp(self.obj, other.obj) > 0
+                def __eq__(self, other):
+                    return mycmp(self.obj, other.obj) == 0
+                def __le__(self, other):
+                    return mycmp(self.obj, other.obj) <= 0
+                def __ge__(self, other):
+                    return mycmp(self.obj, other.obj) >= 0
+                def __ne__(self, other):
+                    return mycmp(self.obj, other.obj) != 0
+            return K
+
+        def order_tuples(a, b):
+            (i1, j1) = a
+            (i2, j2) = b
+            if i1 < i2:
+                return True
+            return j1 < j2
+
+        for i, j in sorted(cl, key=cmp_to_key(order_tuples)):
             distance = self._dist(X[i], X[j], A)
             if distance > max_distance:
                 max_distance = distance
