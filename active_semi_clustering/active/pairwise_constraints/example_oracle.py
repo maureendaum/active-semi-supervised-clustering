@@ -9,8 +9,8 @@ class ExampleOracle:
         self.labels = labels
         self.queries_cnt = 0
         self.max_queries_cnt = max_queries_cnt
-        self.ml = []
-        self.cl = []
+        self.ml = set()
+        self.cl = set()
         self.rng = rng if rng else np.random.default_rng()
 
     def query(self, i, j):
@@ -19,9 +19,9 @@ class ExampleOracle:
             self.queries_cnt += 1
             ml = self.labels[i] == self.labels[j]
             if ml:
-                self.ml.append((i, j))
+                self.ml.add((i, j))
             else:
-                self.cl.append((i, j))
+                self.cl.add((i, j))
             return ml
         else:
             raise MaximumQueriesExceeded

@@ -1,9 +1,12 @@
 import numpy as np
 import scipy
+import sklearn.metrics
+import time
 
 from active_semi_clustering.exceptions import EmptyClustersException
 from active_semi_clustering.farthest_first_traversal import weighted_farthest_first_traversal
 from .constraints import preprocess_constraints
+from .cluster_helpers import find_centroids
 
 
 # np.seterr('raise')
@@ -13,65 +16,117 @@ class MPCKMeansMF:
     MPCK-Means that learns multiple (M) full (F) matrices
     """
 
-    def __init__(self, n_clusters=3, max_iter=100, w=1):
+    def __init__(self, n_clusters=3, max_iter=100, rng=None, w_m=1, w_c=1):
         self.n_clusters = n_clusters
         self.max_iter = max_iter
-        self.w = w
+        self.rng = rng if rng else np.random.default_rng()
+        self.w_m = w_m
+        self.w_c = w_c
+        self.w_log = 1
 
-    def fit(self, X, y=None, ml=[], cl=[]):
+    def _graph_to_list(self, graph):
+        res = []
+        for i, items in graph.items():
+            res.extend([(i, j) for j in items if i < j])
+        return res
+
+    def fit(self, X, y=None, ml=[], cl=[], random_init=False, stop_early=True):
         # Preprocess constraints
+        preprocess_start = time.perf_counter()
         ml_graph, cl_graph, neighborhoods = preprocess_constraints(ml, cl, X.shape[0])
+        # Get all CL constraints from transitive closure.
+        cl = self._graph_to_list(cl_graph)
+        print(f'Preprocess constraints took {time.perf_counter() - preprocess_start:0.2f}s')
 
         # Initialize cluster centers
-        cluster_centers = self._initialize_cluster_centers(X, neighborhoods)
+        init_start = time.perf_counter()
+        if random_init:
+            cluster_centers = X[self.rng.choice(X.shape[0], self.n_clusers, replace=False), :]
+        else:
+            cluster_centers = self._initialize_cluster_centers(X, neighborhoods)
+        print(f'Initialize clusters took {time.perf_counter() - init_start:0.2f}s')
 
         # Initialize metrics
         As = [np.identity(X.shape[1]) for i in range(self.n_clusters)]
 
         # Repeat until convergence
+        self.initial_centers = cluster_centers
+        self.objective_function_values = []
+        self.homogeneity_values = []
+        self.completeness_values = []
+        self.mutual_info_values = []
+        self.iteration_times = []
+        self.As = []
+        self.labels = []
+        self.term_d = []
+        self.term_m = []
+        self.term_c = []
+        self.farthest = []
+        self.farthest_points = []
         for iteration in range(self.max_iter):
+            start = time.perf_counter()
             prev_cluster_centers = cluster_centers.copy()
 
             # Find farthest pair of points according to each metric
-            farthest = self._find_farthest_pairs_of_points(X, As)
+            farthest = self._find_farthest_pairs_of_points(X, As, cl)
 
             # Assign clusters
-            labels = self._assign_clusters(X, y, cluster_centers, As, farthest, ml_graph, cl_graph, self.w)
+            labels = self._assign_clusters(X, y, cluster_centers, As, farthest, ml_graph, cl_graph, self.labels[-1] if len(self.labels) else np.full(X.shape[0], fill_value=-1))
 
             # Estimate means
             cluster_centers = self._get_cluster_centers(X, labels)
 
             # Update metrics
-            As = self._update_metrics(X, labels, cluster_centers, farthest, ml_graph, cl_graph, self.w)
+            As = self._update_metrics(X, labels, cluster_centers, farthest, ml_graph, cl_graph)
+            # print(As)
+
+            # Compute stats
+            error, term_d, term_m, term_c = 0, 0, 0, 0
+            for x_i in range(X.shape[0]):
+                i_error, i_d, i_m, i_c = self._objective_function(X, x_i, labels, cluster_centers, labels[x_i], As, farthest, ml_graph, cl_graph)
+                error += i_error
+                term_d += i_d
+                term_m += i_m
+                term_c += i_c
+            self.objective_function_values.append(error)
+            self.term_d.append(term_d)
+            self.term_m.append(term_m)
+            self.term_c.append(term_c)
+            if farthest[0]:
+                self.farthest.append([f[2] for f in farthest])
+                self.farthest_points.append([(f[0], f[1]) for f in farthest])
+            self.homogeneity_values.append(sklearn.metrics.homogeneity_score(y, labels))
+            self.completeness_values.append(sklearn.metrics.completeness_score(y, labels))
+            self.mutual_info_values.append(sklearn.metrics.adjusted_mutual_info_score(y, labels))
+            self.As.append(As)
+            self.labels.append(labels)
 
             # Check for convergence
             cluster_centers_shift = (prev_cluster_centers - cluster_centers)
             converged = np.allclose(cluster_centers_shift, np.zeros(cluster_centers.shape), atol=1e-6, rtol=0)
 
-            if converged:
+            self.iteration_times.append(time.perf_counter() - start)
+
+            if converged and stop_early:
                 break
 
-        # print('\t', iteration, converged)
+        print('\t', iteration, converged)
 
         self.cluster_centers_, self.labels_ = cluster_centers, labels
         self.As_ = As
 
         return self
 
-    def _find_farthest_pairs_of_points(self, X, As):
+    def _find_farthest_pairs_of_points(self, X, As, cl):
         farthest = [None] * self.n_clusters
+        max_distance = [0] * self.n_clusters
 
-        n = X.shape[0]
-        for cluster_id in range(self.n_clusters):
-            max_distance = 0
-
-            for i in range(n):
-                for j in range(n):
-                    if j < i:
-                        distance = self._dist(X[i], X[j], As[cluster_id])
-                        if distance > max_distance:
-                            max_distance = distance
-                            farthest[cluster_id] = (i, j, distance)
+        for i, j in cl:
+            for cluster_id in range(self.n_clusters):
+                distance = self._dist(X[i], X[j], As[cluster_id])
+                if distance > max_distance[cluster_id]:
+                    max_distance[cluster_id] = distance
+                    farthest[cluster_id] = (i, j, distance)
 
         return farthest
 
@@ -83,15 +138,16 @@ class MPCKMeansMF:
         # print('\t', len(neighborhoods), neighborhood_sizes)
 
         if len(neighborhoods) > self.n_clusters:
-            cluster_centers = neighborhood_centers[weighted_farthest_first_traversal(neighborhood_centers, neighborhood_weights, self.n_clusters)]
+            cluster_centers = neighborhood_centers[weighted_farthest_first_traversal(neighborhood_centers, neighborhood_weights, self.n_clusters, rng=self.rng)]
         else:
             if len(neighborhoods) > 0:
                 cluster_centers = neighborhood_centers
             else:
                 cluster_centers = np.empty((0, X.shape[1]))
 
-            if len(neighborhoods) < self.n_clusters:
-                remaining_cluster_centers = X[np.random.choice(X.shape[0], self.n_clusters - len(neighborhoods), replace=False), :]
+            num_remaining = self.n_clusters - len(neighborhoods)
+            if num_remaining:
+                remaining_cluster_centers = find_centroids(num_remaining, X, self.rng)
                 cluster_centers = np.concatenate([cluster_centers, remaining_cluster_centers])
 
         return cluster_centers
@@ -100,35 +156,34 @@ class MPCKMeansMF:
         "(x - y)^T A (x - y)"
         return scipy.spatial.distance.mahalanobis(x, y, A) ** 2
 
-    def _objective_function(self, X, i, labels, cluster_centers, cluster_id, As, farthest, ml_graph, cl_graph, w):
-        term_d = self._dist(X[i], cluster_centers[cluster_id], As[cluster_id]) - np.log(max(np.linalg.det(As[cluster_id]), 1e-9))
+    def _objective_function(self, X, i, labels, cluster_centers, cluster_id, As, farthest, ml_graph, cl_graph):
+        term_d = self._dist(X[i], cluster_centers[cluster_id], As[cluster_id]) - self.w_log * np.log(np.linalg.det(As[cluster_id]))
 
         def f_m(i, c_i, j, c_j, As):
             return 1 / 2 * self._dist(X[i], X[j], As[c_i]) + 1 / 2 * self._dist(X[i], X[j], As[c_j])
 
         def f_c(i, c_i, j, c_j, As, farthest):
+            assert c_i == c_j
             return farthest[c_i][2] - self._dist(X[i], X[j], As[c_i])
 
         term_m = 0
         for j in ml_graph[i]:
             if labels[j] >= 0 and labels[j] != cluster_id:
-                term_m += 2 * w * f_m(i, cluster_id, j, labels[j], As)
+                term_m += self.w_m * f_m(i, cluster_id, j, labels[j], As)
 
         term_c = 0
         for j in cl_graph[i]:
             if labels[j] == cluster_id:
-                term_c += 2 * w * f_c(i, cluster_id, j, labels[j], As, farthest)
+                term_c += self.w_c * f_c(i, cluster_id, j, labels[j], As, farthest)
 
-        return term_d + term_m + term_c
+        return term_d + term_m + term_c, term_d, term_m, term_c
 
-    def _assign_clusters(self, X, y, cluster_centers, As, farthest, ml_graph, cl_graph, w):
-        labels = np.full(X.shape[0], fill_value=-1)
-
+    def _assign_clusters(self, X, y, cluster_centers, As, farthest, ml_graph, cl_graph, labels):
         index = list(range(X.shape[0]))
         np.random.shuffle(index)
         for i in index:
             labels[i] = np.argmin(
-                [self._objective_function(X, i, labels, cluster_centers, cluster_id, As, farthest, ml_graph, cl_graph, w) for cluster_id, cluster_center in enumerate(cluster_centers)])
+                [self._objective_function(X, i, labels, cluster_centers, cluster_id, As, farthest, ml_graph, cl_graph)[0] for cluster_id, cluster_center in enumerate(cluster_centers)])
 
         # Handle empty clusters
         # See https://github.com/scikit-learn/scikit-learn/blob/0.19.1/sklearn/cluster/_k_means.pyx#L309
@@ -141,7 +196,7 @@ class MPCKMeansMF:
 
         return labels
 
-    def _update_metrics(self, X, labels, cluster_centers, farthest, ml_graph, cl_graph, w):
+    def _update_metrics(self, X, labels, cluster_centers, farthest, ml_graph, cl_graph):
         As = []
 
         for cluster_id in range(self.n_clusters):
@@ -158,13 +213,15 @@ class MPCKMeansMF:
                 for j in ml_graph[i]:
                     if labels[i] == cluster_id or labels[j] == cluster_id:
                         if labels[i] != labels[j]:
-                            A_inv += 1 / 2 * w * ((X[i][:, None] - X[j][:, None]) @ (X[i][:, None] - X[j][:, None]).T)
+                            # * 1/4 rather than 1/2 because we'll count both ij and ji.
+                            A_inv += 1 / 4 * self.w_m * ((X[i][:, None] - X[j][:, None]) @ (X[i][:, None] - X[j][:, None]).T)
 
             for i in range(X.shape[0]):
                 for j in cl_graph[i]:
                     if labels[i] == cluster_id or labels[j] == cluster_id:
                         if labels[i] == labels[j]:
-                            A_inv += w * (
+                            # * 1/2 because we'll count both ij and ji
+                            A_inv += 1/2 * self.w_c * (
                                     ((X[farthest[cluster_id][0]][:, None] - X[farthest[cluster_id][1]][:, None]) @ (X[farthest[cluster_id][0]][:, None] - X[farthest[cluster_id][1]][:, None]).T) - (
                                     (X[i][:, None] - X[j][:, None]) @ (X[i][:, None] - X[j][:, None]).T))
 

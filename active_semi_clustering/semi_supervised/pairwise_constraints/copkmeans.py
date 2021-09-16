@@ -1,13 +1,16 @@
 import numpy as np
+import sklearn.metrics
+import time
 
 from active_semi_clustering.exceptions import EmptyClustersException, ClusteringNotFoundException
 from .constraints import preprocess_constraints
 
 
 class COPKMeans:
-    def __init__(self, n_clusters=3, max_iter=100):
+    def __init__(self, n_clusters=3, max_iter=100, rng=None):
         self.n_clusters = n_clusters
         self.max_iter = max_iter
+        self.rng = rng if rng else np.random.default_rng()
 
     def fit(self, X, y=None, ml=[], cl=[]):
         ml_graph, cl_graph, neighborhoods = preprocess_constraints(ml, cl, X.shape[0])
@@ -16,7 +19,13 @@ class COPKMeans:
         cluster_centers = self._init_cluster_centers(X)
 
         # Repeat until convergence
+        self.initial_centers = cluster_centers
+        self.homogeneity_values = []
+        self.completeness_values = []
+        self.iteration_times = []
+        self.labels = []
         for iteration in range(self.max_iter):
+            start = time.perf_counter()
             prev_cluster_centers = cluster_centers.copy()
 
             # Assign clusters
@@ -25,18 +34,27 @@ class COPKMeans:
             # Estimate means
             cluster_centers = self._get_cluster_centers(X, labels)
 
+            # Update stats.
+            self.homogeneity_values.append(sklearn.metrics.homogeneity_score(y, labels))
+            self.completeness_values.append(sklearn.metrics.completeness_score(y, labels))
+            self.labels.append(labels)
+
             # Check for convergence
             cluster_centers_shift = (prev_cluster_centers - cluster_centers)
             converged = np.allclose(cluster_centers_shift, np.zeros(cluster_centers.shape), atol=1e-6, rtol=0)
 
+            self.iteration_times.append(time.perf_counter() - start)
+
             if converged: break
+
+        print('\t', iteration, converged)
 
         self.cluster_centers_, self.labels_ = cluster_centers, labels
 
         return self
 
     def _init_cluster_centers(self, X):
-        return X[np.random.choice(X.shape[0], self.n_clusters, replace=False), :]
+        return X[self.rng.choice(X.shape[0], self.n_clusters, replace=False), :]
 
     def _dist(self, x, y):
         return np.sqrt(np.sum((x - y) ** 2))
@@ -57,15 +75,23 @@ class COPKMeans:
         labels = np.full(X.shape[0], fill_value=-1)
 
         data_indices = list(range(X.shape[0]))
-        np.random.shuffle(data_indices)
+        self.rng.shuffle(data_indices)
 
         for i in data_indices:
+            if labels[i] != -1:
+                continue
             distances = np.array([dist(X[i], c) for c in cluster_centers])
             # sorted_cluster_indices = np.argsort([dist(x, c) for c in cluster_centers])
 
             for cluster_index in distances.argsort():
                 if not self._violates_constraints(i, cluster_index, labels, ml_graph, cl_graph):
                     labels[i] = cluster_index
+
+                    # Avoid failure case by adding must-link neighbors as in
+                    # https://github.com/Behrouz-Babaki/COP-Kmeans/blob/master/copkmeans/cop_kmeans.py#L26
+                    for j in ml_graph[i]:
+                        labels[j] = cluster_index
+
                     break
 
             if labels[i] < 0:

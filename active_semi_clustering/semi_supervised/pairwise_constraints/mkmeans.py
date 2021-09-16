@@ -1,6 +1,7 @@
 import numpy as np
 
 from sklearn.cluster import KMeans
+import sklearn.metrics
 from metric_learn import MMC
 from .constraints import preprocess_constraints
 
@@ -15,11 +16,14 @@ class MKMeans:
     def fit(self, X, y=None, ml=[], cl=[]):
         X_transformed = X
 
-        assert ml and cl
         ml_graph, cl_graph, _ = preprocess_constraints(ml, cl, X.shape[0])
 
         pairs = []
         labels = []
+        self.labels = []
+        self.homogeneity_values = []
+        self.completeness_values = []
+        self.mutual_info_values = []
         for i, constraints in ml_graph.items():
             for j in constraints:
                 pairs.append((i, j))
@@ -36,6 +40,11 @@ class MKMeans:
 
         kmeans = KMeans(n_clusters=self.n_clusters, init='k-means++', max_iter=self.max_iter, random_state=self.rng)
         kmeans.fit(X_transformed)
+
+        self.labels.append(kmeans.labels_)
+        self.homogeneity_values.append(sklearn.metrics.homogeneity_score(y, kmeans.labels_))
+        self.completeness_values.append(sklearn.metrics.completeness_score(y, kmeans.labels_))
+        self.mutual_info_values.append(sklearn.metrics.adjusted_mutual_info_score(y, kmeans.labels_))
 
         self.labels_ = kmeans.labels_
 

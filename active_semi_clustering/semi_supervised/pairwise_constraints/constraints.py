@@ -15,12 +15,10 @@ def preprocess_constraints(ml, cl, n):
         d[j].add(i)
 
     for (i, j) in ml:
-        ml_graph[i].add(j)
-        ml_graph[j].add(i)
+        add_both(ml_graph, i, j)
 
     for (i, j) in cl:
-        cl_graph[i].add(j)
-        cl_graph[j].add(i)
+        add_both(cl_graph, i, j)
 
     def dfs(i, graph, visited, component):
         visited[i] = True

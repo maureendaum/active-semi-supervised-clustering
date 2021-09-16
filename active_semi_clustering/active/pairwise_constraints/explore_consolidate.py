@@ -5,8 +5,9 @@ from .example_oracle import MaximumQueriesExceeded
 
 
 class ExploreConsolidate:
-    def __init__(self, n_clusters=3, **kwargs):
+    def __init__(self, n_clusters=3, rng=None, **kwargs):
         self.n_clusters = n_clusters
+        self.rng = rng if rng else np.random.default_rng()
 
     def fit(self, X, oracle=None, allowed_indices=None):
         if oracle.max_queries_cnt <= 0:
@@ -24,7 +25,7 @@ class ExploreConsolidate:
         traversed = []
         index = allowed_indices if allowed_indices else range(X.shape[0])
 
-        x = np.random.choice(index)
+        x = self.rng.choice(index)
         neighborhoods.append([x])
         traversed.append(x)
 
@@ -74,7 +75,7 @@ class ExploreConsolidate:
         while True:
 
             try:
-                i = np.random.choice(list(remaining))
+                i = self.rng.choice(list(remaining))
 
                 sorted_neighborhoods = sorted(neighborhoods, key=lambda neighborhood: dist(i, neighborhood, X))
 
