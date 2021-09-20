@@ -16,10 +16,11 @@ class MPCKMeans:
     def __init__(self, n_clusters=3, max_iter=10, rng=None, w_m=1, w_c=1):
         self.n_clusters = n_clusters
         self.max_iter = max_iter
-        self.rng = rng if rng else np.random.default_rng()
+        self.rng = rng if rng else np.random.RandomState()
         self.w_m = w_m
         self.w_c = w_c
         self.w_log = 1
+        self.log_det_A = None
 
     # TODO: Deduplicate from MPCKMeansMF.
     def _graph_to_list(self, graph):
@@ -48,6 +49,7 @@ class MPCKMeans:
 
         # Initialize metrics
         A = np.identity(X.shape[1])
+        self._update_determinant(A)
 
         # Repeat until convergence
         self.initial_centers = cluster_centers
@@ -70,7 +72,7 @@ class MPCKMeans:
             # Find farthest pair of points according to each metric
             farthest = self._find_farthest_pairs_of_points(X, A, cl)
 
-            # Assign clusters
+            # Assign clusters.
             labels = self._assign_clusters(X, y, cluster_centers, A, farthest, ml_graph, cl_graph, self.labels[-1] if len(self.labels) else np.full(X.shape[0], fill_value=-1))
 
             # Estimate means
@@ -78,6 +80,7 @@ class MPCKMeans:
 
             # Update metrics
             A = self._update_metrics(X, labels, cluster_centers, farthest, ml_graph, cl_graph)
+            self._update_determinant(A)
 
             # Compute objective function value
             error, term_d, term_m, term_c = 0, 0, 0, 0
@@ -115,6 +118,9 @@ class MPCKMeans:
         self.cluster_centers_, self.labels_ = cluster_centers, labels
 
         return self
+
+    def _update_determinant(self, A):
+        self.log_det_A = np.log(np.linalg.det(A))
 
     def _find_farthest_pairs_of_points(self, X, A, cl):
         # This needs to be restricted to just points with a cannot-link constraint.
@@ -156,7 +162,7 @@ class MPCKMeans:
         return scipy.spatial.distance.mahalanobis(x, y, A) ** 2
 
     def _objective_fn(self, X, i, labels, cluster_centers, cluster_id, A, farthest, ml_graph, cl_graph):
-        term_d = self._dist(X[i], cluster_centers[cluster_id], A) - self.w_log * np.log(np.linalg.det(A))  # FIXME is it okay that it might be negative?
+        term_d = self._dist(X[i], cluster_centers[cluster_id], A) - self.w_log * self.log_det_A # FIXME is it okay that it might be negative?
 
         def f_m(i, j, A):
             return self._dist(X[i], X[j], A)

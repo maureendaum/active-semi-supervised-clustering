@@ -19,10 +19,11 @@ class MPCKMeansMF:
     def __init__(self, n_clusters=3, max_iter=100, rng=None, w_m=1, w_c=1):
         self.n_clusters = n_clusters
         self.max_iter = max_iter
-        self.rng = rng if rng else np.random.default_rng()
+        self.rng = rng if rng else np.random.RandomState()
         self.w_m = w_m
         self.w_c = w_c
         self.w_log = 1
+        self.log_det_As = []
 
     def _graph_to_list(self, graph):
         res = []
@@ -41,13 +42,14 @@ class MPCKMeansMF:
         # Initialize cluster centers
         init_start = time.perf_counter()
         if random_init:
-            cluster_centers = X[self.rng.choice(X.shape[0], self.n_clusers, replace=False), :]
+            cluster_centers = X[self.rng.choice(X.shape[0], self.n_clusters, replace=False), :]
         else:
             cluster_centers = self._initialize_cluster_centers(X, neighborhoods)
         print(f'Initialize clusters took {time.perf_counter() - init_start:0.2f}s')
 
         # Initialize metrics
         As = [np.identity(X.shape[1]) for i in range(self.n_clusters)]
+        self._update_determinants(As)
 
         # Repeat until convergence
         self.initial_centers = cluster_centers
@@ -78,6 +80,7 @@ class MPCKMeansMF:
 
             # Update metrics
             As = self._update_metrics(X, labels, cluster_centers, farthest, ml_graph, cl_graph)
+            self._update_determinants(As)
             # print(As)
 
             # Compute stats
@@ -116,6 +119,9 @@ class MPCKMeansMF:
         self.As_ = As
 
         return self
+
+    def _update_determinants(self, As):
+        self.log_det_As = [np.log(max(np.linalg.det(A), 1e-9)) for A in As]
 
     def _find_farthest_pairs_of_points(self, X, As, cl):
         farthest = [None] * self.n_clusters
@@ -157,7 +163,8 @@ class MPCKMeansMF:
         return scipy.spatial.distance.mahalanobis(x, y, A) ** 2
 
     def _objective_function(self, X, i, labels, cluster_centers, cluster_id, As, farthest, ml_graph, cl_graph):
-        term_d = self._dist(X[i], cluster_centers[cluster_id], As[cluster_id]) - self.w_log * np.log(np.linalg.det(As[cluster_id]))
+        # Include max term inside of log because the determinant is sometimes negative.
+        term_d = self._dist(X[i], cluster_centers[cluster_id], As[cluster_id]) - self.w_log * self.log_det_As[cluster_id]
 
         def f_m(i, c_i, j, c_j, As):
             return 1 / 2 * self._dist(X[i], X[j], As[c_i]) + 1 / 2 * self._dist(X[i], X[j], As[c_j])

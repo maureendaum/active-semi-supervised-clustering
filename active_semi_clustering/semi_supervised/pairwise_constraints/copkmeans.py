@@ -1,4 +1,5 @@
 import numpy as np
+import sklearn.cluster
 import sklearn.metrics
 import time
 
@@ -10,13 +11,25 @@ class COPKMeans:
     def __init__(self, n_clusters=3, max_iter=100, rng=None):
         self.n_clusters = n_clusters
         self.max_iter = max_iter
-        self.rng = rng if rng else np.random.default_rng()
+        self.rng = rng if rng else np.random.RandomState()
+
+    # TODO: Deduplicate from MPCKMeansMF.
+    def _graph_to_list(self, graph):
+        res = []
+        for i, items in graph.items():
+            res.extend([(i, j) for j in items if i < j])
+        return res
 
     def fit(self, X, y=None, ml=[], cl=[]):
+        preprocess_start = time.perf_counter()
         ml_graph, cl_graph, neighborhoods = preprocess_constraints(ml, cl, X.shape[0])
+        cl = self._graph_to_list(cl_graph)
+        print(f'Preprocess constraints took {time.perf_counter() - preprocess_start:0.2f}s')
 
         # Initialize cluster centers
+        init_start = time.perf_counter()
         cluster_centers = self._init_cluster_centers(X)
+        print(f'Initialize centers took {time.perf_counter() - init_start:0.2f}s')
 
         # Repeat until convergence
         self.initial_centers = cluster_centers
@@ -53,8 +66,13 @@ class COPKMeans:
 
         return self
 
-    def _init_cluster_centers(self, X):
-        return X[self.rng.choice(X.shape[0], self.n_clusters, replace=False), :]
+    def _init_cluster_centers(self, X, method='kmpp'):
+        if method == 'random':
+            return X[self.rng.choice(X.shape[0], self.n_clusters, replace=False), :]
+
+        elif method == 'kmpp':
+            centers, _ = sklearn.cluster.kmeans_plusplus(X, self.n_clusters, random_state=self.rng)
+            return centers
 
     def _dist(self, x, y):
         return np.sqrt(np.sum((x - y) ** 2))
@@ -62,7 +80,7 @@ class COPKMeans:
     def _assign_clusters(self, *args):
         max_retries_cnt = 1000
 
-        for retries_cnt in range(max_retries_cnt):
+        for _ in range(max_retries_cnt):
             try:
                 return self._try_assign_clusters(*args)
 
@@ -90,6 +108,7 @@ class COPKMeans:
                     # Avoid failure case by adding must-link neighbors as in
                     # https://github.com/Behrouz-Babaki/COP-Kmeans/blob/master/copkmeans/cop_kmeans.py#L26
                     for j in ml_graph[i]:
+                        assert labels[j] == -1
                         labels[j] = cluster_index
 
                     break

@@ -11,7 +11,7 @@ class MKMeans:
         self.n_clusters = n_clusters
         self.max_iter = max_iter
         self.diagonal = diagonal
-        self.rng = rng if rng else np.random.default_rng()
+        self.rng = rng if rng else np.random.RandomState()
 
     def fit(self, X, y=None, ml=[], cl=[]):
         X_transformed = X

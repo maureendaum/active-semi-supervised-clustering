@@ -9,7 +9,7 @@ def find_centroids(n, X, rng=None):
     j = 10
     s = max(int(0.1 * X.shape[0]), n)
     assert s <= X.shape[0], 'Number of samples > number of data points (%r > %r)' % (s, X.shape[0])
-    rng = rng if rng else np.random.default_rng()
+    rng = rng if rng else np.random.RandomState()
 
     em_centers = []
     for _ in range(j):
@@ -33,7 +33,7 @@ def test_gm():
     gm = GaussianMixture(n_components=2, random_state=0).fit(X)
 
     # Sanity check that find_centroids is doing something reasonable.
-    rng = np.random.default_rng()
+    rng = np.random.RandomState()
     X1 = rng.normal((1, 1), 0.3, (50, 2))
     X2 = rng.normal((2, 2), 0.1, (50, 2))
     X3 = rng.normal((1, 2), 0.2, (50, 2))

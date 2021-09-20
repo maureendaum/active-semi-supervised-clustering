@@ -7,16 +7,17 @@ from .example_oracle import MaximumQueriesExceeded
 class ExploreConsolidate:
     def __init__(self, n_clusters=3, rng=None, **kwargs):
         self.n_clusters = n_clusters
-        self.rng = rng if rng else np.random.default_rng()
+        self.rng = rng if rng else np.random.RandomState()
 
     def fit(self, X, oracle=None, allowed_indices=None):
         if oracle.max_queries_cnt <= 0:
-            return [], []
+            # self.pairwise_constraints_ = ([], [])
+            return self
 
         neighborhoods = self._explore(X, self.n_clusters, oracle, allowed_indices)
         neighborhoods = self._consolidate(neighborhoods, X, oracle, allowed_indices)
 
-        self.pairwise_constraints_ = get_constraints_from_neighborhoods(neighborhoods, oracle.ml, oracle.cl)
+        # self.pairwise_constraints_ = get_constraints_from_neighborhoods(neighborhoods, oracle.ml, oracle.cl)
 
         return self
 

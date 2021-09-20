@@ -31,7 +31,7 @@ def farthest_first_traversal(points, k):
 
 
 def weighted_farthest_first_traversal(points, weights, k, rng=None):
-    rng = rng if rng else np.random.default_rng()
+    rng = rng if rng else np.random.RandomState()
     traversed = []
 
     # Choose the first point randomly (weighted)

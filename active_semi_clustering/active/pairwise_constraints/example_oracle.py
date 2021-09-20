@@ -11,7 +11,7 @@ class ExampleOracle:
         self.max_queries_cnt = max_queries_cnt
         self.ml = set()
         self.cl = set()
-        self.rng = rng if rng else np.random.default_rng()
+        self.rng = rng if rng else np.random.RandomState()
 
     def query(self, i, j):
         "Query the oracle to find out whether i and j should be must-linked"
