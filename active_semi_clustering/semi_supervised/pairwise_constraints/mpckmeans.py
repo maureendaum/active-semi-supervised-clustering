@@ -73,7 +73,7 @@ class MPCKMeans:
             farthest = self._find_farthest_pairs_of_points(X, A, cl)
 
             # Assign clusters.
-            labels = self._assign_clusters(X, y, cluster_centers, A, farthest, ml_graph, cl_graph, self.labels[-1] if len(self.labels) else np.full(X.shape[0], fill_value=-1))
+            labels = self._assign_clusters(X, y, cluster_centers, A, farthest, ml_graph, cl_graph, self.labels[-1].copy() if len(self.labels) else np.full(X.shape[0], fill_value=-1))
 
             # Estimate means
             cluster_centers = self._get_cluster_centers(X, labels)
@@ -97,9 +97,10 @@ class MPCKMeans:
             if farthest:
                 self.farthest.append(farthest[2])
                 self.farthest_points.append((farthest[0], farthest[1]))
-            self.homogeneity_values.append(sklearn.metrics.homogeneity_score(y, labels))
-            self.completeness_values.append(sklearn.metrics.completeness_score(y, labels))
-            self.mutual_info_values.append(sklearn.metrics.adjusted_mutual_info_score(y, labels))
+            if y is not None:
+                self.homogeneity_values.append(sklearn.metrics.homogeneity_score(y, labels))
+                self.completeness_values.append(sklearn.metrics.completeness_score(y, labels))
+                self.mutual_info_values.append(sklearn.metrics.adjusted_mutual_info_score(y, labels))
             self.As.append(A)
             self.labels.append(labels)
 
